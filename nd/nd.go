@@ -60,7 +60,7 @@ func (nd *NetDog) Close() error {
 func (nd *NetDog) pick(needle *[32]byte) *directory.ShortNodeInfo {
 	var highestNotGreater *directory.ShortNodeInfo
 	for _, ni := range nd.routers {
-		if !ni.Fast || !ni.Stable || !ni.Running {
+		if !ni.Fast || !ni.Stable || !ni.Running || !ni.Valid {
 			continue
 		}
 		if bytes.Compare(ni.ID[:], needle[:]) <= 0 &&
@@ -85,19 +85,14 @@ func (nd *NetDog) pick(needle *[32]byte) *directory.ShortNodeInfo {
 
 // connect requires len(cookie) = 20 and len(sendPayload) == 148. Nondeterminisitcally, EITHER
 // the sendPayload is sent to the peer OR their sendPayload is returned here, not both.
-func (nd *NetDog) connect(ctx context.Context, cookie []byte, sendPayload []byte, mid *directory.NodeInfo) (*torch.TorConn, *torch.Circuit, []byte, error) {
-	tc, err := torch.DialOnionRouter(ctx, (net.IP)(mid.IP[:]).String()+":"+fmt.Sprint(mid.Port), mid.ID[:], proxy.FromEnvironment())
-	if err != nil {
-		return nil, nil, nil, err
-	}
-
+func connect(ctx context.Context, tc *torch.TorConn, cookie []byte, sendPayload []byte, tcID []byte, tcNtorPublic []byte) (*torch.TorConn, *torch.Circuit, []byte, error) {
 	type circRet struct {
 		*torch.Circuit
 		error
 	}
 	ch := make(chan circRet)
 	mkCirc := func() {
-		circ, err := tc.CreateCircuit(ctx, mid.ID[:], mid.NTorOnionKey)
+		circ, err := tc.CreateCircuit(ctx, tcID, tcNtorPublic)
 		ch <- circRet{circ, err}
 	}
 	go mkCirc()
@@ -147,7 +142,16 @@ func ND(ctx context.Context, needle *[32]byte, seed []byte) (*Conn, error) {
 	}
 	mid := mid_[0]
 
-	kdf := hkdf.New(sha256.New, seed, mid.ID[:], nil)
+	tc, err := torch.DialOnionRouter(ctx, (net.IP)(mid.IP[:]).String()+":"+fmt.Sprint(mid.Port), mid.ID[:], proxy.FromEnvironment())
+	if err != nil {
+		return nil, err
+	}
+
+	return Handshake(ctx, tc, seed, mid.ID[:], mid.NTorOnionKey[:])
+}
+
+func Handshake(ctx context.Context, tc *torch.TorConn, seed, routerID, routerNTorPublic []byte) (*Conn, error) {
+	kdf := hkdf.New(sha256.New, seed, routerID, nil)
 	var cookie [20]byte
 	var authKeyAccept, authKeyDial, continueKey [32]byte
 	if _, err := io.ReadFull(kdf, cookie[:]); err != nil {
@@ -169,7 +173,7 @@ func ND(ctx context.Context, needle *[32]byte, seed []byte) (*Conn, error) {
 	var theirPK [32]byte
 	vouchDial := secretbox.Seal(nil, pk[:], &[24]byte{}, &authKeyDial)
 
-	tc, circ, theirVouchDial, err := nd.connect(ctx, cookie[:], vouchDial[:], mid)
+	tc, circ, theirVouchDial, err := connect(ctx, tc, cookie[:], vouchDial[:], routerID, routerNTorPublic)
 	if err != nil {
 		return nil, err
 	}
@@ -202,7 +206,7 @@ func ND(ctx context.Context, needle *[32]byte, seed []byte) (*Conn, error) {
 	ret := &Conn{
 		TorConn: tc,
 		Circuit: circ,
-		KDF:     hkdf.New(sha256.New, append(continueKey[:], sharedDH[:]...), mid.ID[:], nil),
+		KDF:     hkdf.New(sha256.New, append(continueKey[:], sharedDH[:]...), routerID[:], nil),
 		Bit:     theirVouchDial != nil,
 	}
 	if ret.Bit {
