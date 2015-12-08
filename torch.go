@@ -187,15 +187,21 @@ func niAddr(ni *directory.NodeInfo) string {
 	return fmt.Sprintf("%d.%d.%d.%d:%d", ni.IP[0], ni.IP[1], ni.IP[2], ni.IP[3], ni.Port)
 }
 
-func (t *Torch) Pick(weighWith func(w *directory.BandwidthWeights, n *directory.NodeInfo) int64) *directory.NodeInfo {
+func (t *Torch) WithDirectory(f func(*directory.Directory) interface{}) interface{} {
 	t.RLock()
 	defer t.RUnlock()
+	return f(t.cachedDir)
+}
 
+func (t *Torch) Pick(weighWith func(w *directory.BandwidthWeights, n *directory.NodeInfo) int64) *directory.NodeInfo {
 	weigh := func(n *directory.NodeInfo) int64 {
 		return weighWith(&t.cachedDir.Consensus.BandwidthWeights, n)
 	}
 
-	return directory.Pick(weigh, t.cachedDir.Routers, nil)
+	return t.WithDirectory(func(d *directory.Directory) interface{} {
+		return directory.Pick(weigh, d.Routers, nil)
+	}).(*directory.NodeInfo)
+
 }
 
 func weighRelayWith(w *directory.BandwidthWeights, n *directory.NodeInfo) int64 {

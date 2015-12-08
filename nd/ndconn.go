@@ -10,7 +10,6 @@ import (
 )
 
 type Conn struct {
-	TorConn *torch.TorConn
 	Circuit *torch.Circuit
 	Bit     bool
 	KDF     io.Reader
@@ -22,7 +21,7 @@ type Conn struct {
 }
 
 func (ndc *Conn) Close() error {
-	err := ndc.TorConn.Close()
+	err := ndc.Circuit.Close()
 
 	ndc.writeMu.Lock()
 	defer ndc.writeMu.Unlock()
