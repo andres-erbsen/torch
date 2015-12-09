@@ -213,45 +213,39 @@ func weighExitWith(w *directory.BandwidthWeights, n *directory.NodeInfo) int64 {
 }
 
 func (t *Torch) UnguardedCircuitTo(ctx context.Context, n int, dst *directory.NodeInfo) (*TorConn, *Circuit, error) {
-	if n < 1 {
-		return nil, nil, fmt.Errorf("cannot build circuit of %d nodes", n)
+	// n is the number of nodes, including dst
+
+	nodes := make([]*directory.NodeInfo, n)
+	for i := 0; i <= n-2; i++ {
+		nodes[i] = t.Pick(weighRelayWith)
 	}
-	if n >= 6 {
+	nodes[n-1] = dst
+
+	return BuildCircuit(ctx, t.dialer, nodes)
+}
+
+func BuildCircuit(ctx context.Context, dialer proxy.Dialer, nodes []*directory.NodeInfo) (*TorConn, *Circuit, error) {
+	if len(nodes) < 1 {
+		return nil, nil, fmt.Errorf("cannot build circuit of %d nodes", len(nodes))
+	}
+	if len(nodes) > 8 {
 		return nil, nil, fmt.Errorf("requested circuit too long")
 	}
-
-	// entry
-	var n1 *directory.NodeInfo
-	if n == 1 {
-		n1 = dst
-	} else {
-		n1 = t.Pick(weighRelayWith)
-	}
-	tc, err := DialOnionRouter(ctx, niAddr(n1), n1.ID[:], t.dialer)
+	tc, err := DialOnionRouter(ctx, niAddr(nodes[0]), nodes[0].ID[:], dialer)
 	if err != nil {
 		return nil, nil, err
 	}
-	circ, err := tc.CreateCircuit(ctx, n1.ID[:], n1.NTorOnionKey)
+	circ, err := tc.CreateCircuit(ctx, nodes[0].ID[:], nodes[0].NTorOnionKey)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	if n == 1 {
-		return tc, circ, err
-	}
-
-	// routers
-	for i := 2; i < n; i++ {
-		ni := t.Pick(weighRelayWith)
+	for i := 1; i < len(nodes); i++ {
+		ni := nodes[i]
 		if err := circ.Extend(net.IP(ni.IP[:]), ni.Port, ni.ID[:], ni.NTorOnionKey); err != nil {
 			return nil, nil, err
 		}
 	}
-
-	if err := circ.Extend(net.IP(dst.IP[:]), dst.Port, dst.ID[:], dst.NTorOnionKey); err != nil {
-		return nil, nil, err
-	}
-
 	return tc, circ, nil
 }
 
