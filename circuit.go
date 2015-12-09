@@ -18,7 +18,7 @@ import (
 const (
 	circuitSendWindowMax = 1000
 	circuitRecvWindowMax = 1000
-	numRelayEarlyMax     = 1000
+	numRelayEarlyMax     = 8
 )
 
 type Circuit struct {
