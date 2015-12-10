@@ -4,14 +4,16 @@ import (
 	"compress/zlib"
 	"encoding/base64"
 	"fmt"
-	"github.com/andres-erbsen/torch/config"
-	"github.com/andres-erbsen/torch/directory"
+	mathrand "math/rand"
 	"net"
 	"net/http"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/andres-erbsen/torch/config"
+	"github.com/andres-erbsen/torch/directory"
 
 	"golang.org/x/net/context"
 	"golang.org/x/net/proxy"
@@ -193,13 +195,13 @@ func (t *Torch) WithDirectory(f func(*directory.Directory) interface{}) interfac
 	return f(t.cachedDir)
 }
 
-func (t *Torch) Pick(weighWith func(w *directory.BandwidthWeights, n *directory.NodeInfo) int64) *directory.NodeInfo {
+func (t *Torch) Pick(weighWith func(w *directory.BandwidthWeights, n *directory.NodeInfo) int64, rnd *mathrand.Rand) *directory.NodeInfo {
 	weigh := func(n *directory.NodeInfo) int64 {
 		return weighWith(&t.cachedDir.Consensus.BandwidthWeights, n)
 	}
 
 	return t.WithDirectory(func(d *directory.Directory) interface{} {
-		return directory.Pick(weigh, d.Routers, nil)
+		return directory.Pick(weigh, d.Routers, rnd)
 	}).(*directory.NodeInfo)
 
 }
@@ -217,7 +219,7 @@ func (t *Torch) UnguardedCircuitTo(ctx context.Context, n int, dst *directory.No
 
 	nodes := make([]*directory.NodeInfo, n)
 	for i := 0; i <= n-2; i++ {
-		nodes[i] = t.Pick(weighRelayWith)
+		nodes[i] = t.Pick(weighRelayWith, nil)
 	}
 	nodes[n-1] = dst
 
@@ -250,7 +252,7 @@ func BuildCircuit(ctx context.Context, dialer proxy.Dialer, nodes []*directory.N
 }
 
 func (t *Torch) UnguardedExitCircuit(ctx context.Context, n int) (*TorConn, *Circuit, error) {
-	return t.UnguardedCircuitTo(ctx, n, t.Pick(weighExitWith))
+	return t.UnguardedCircuitTo(ctx, n, t.Pick(weighExitWith, nil))
 }
 
 func (t *Torch) Stop() error {

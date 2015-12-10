@@ -60,7 +60,7 @@ func TestRendezvous(t *testing.T) {
 	defer torch.Stop()
 
 	// FIXME: implement threadsafe Pick in Torch
-	dst := torch.Pick(weighRelayWith)
+	dst := torch.Pick(weighRelayWith, nil)
 
 	cookie := make([]byte, 20)
 	payload := make([]byte, 148)
@@ -145,7 +145,7 @@ func TestHandshakeFailure(t *testing.T) {
 			return 1
 		}
 		return 0
-	})
+	}, nil)
 
 	tc1, _, err := torch.UnguardedCircuitTo(ctx, 1, n)
 	if err != nil {
