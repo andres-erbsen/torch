@@ -1,10 +1,12 @@
 #!/bin/sh
 
-host="18.181.5.37:9032"
+host="18.85.22.239:80"
+
+zlibd() (python2 -c "import zlib,sys;sys.stdout.write(zlib.decompress(sys.stdin.read()))")
 
 echo -e "package doggiebag\nimport \"time\"\nvar Time = time.Unix($(date +%s), 0)" > time.go
-curl -# "http://$host/tor/keys/all.z" | openssl zlib -d > keys
-curl -# "http://$host/tor/status-vote/current/consensus-microdesc.z" | openssl zlib -d > consensus-microdesc
+curl -# "http://$host/tor/keys/all.z" | zlibd > keys
+curl -# "http://$host/tor/status-vote/current/consensus-microdesc.z" | zlibd > consensus-microdesc
 
 (
 	grep '^m' consensus-microdesc |
@@ -12,7 +14,7 @@ curl -# "http://$host/tor/status-vote/current/consensus-microdesc.z" | openssl z
 		xargs -n92 echo |
 		tr ' ' '-' |
 		while read batch; do
-			curl -# "http://$host/tor/micro/d/$batch.z" | openssl zlib -d
+			curl -# "http://$host/tor/micro/d/$batch.z" | zlibd
 		done
 ) > microdescriptors
 
