@@ -11,7 +11,7 @@ import (
 func HashPublicKey(pub interface{}) ([]byte, error) {
 	switch pub := pub.(type) {
 	case *rsa.PublicKey:
-		publicKeyBytes, err := asn1.Marshal(struct{*big.Int;int}{pub.N, pub.E})
+		publicKeyBytes, err := asn1.Marshal(struct{N *big.Int;E int}{pub.N, pub.E})
 		if err != nil {
 			return nil, err
 		}
