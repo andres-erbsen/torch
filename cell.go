@@ -112,8 +112,14 @@ func (tc *TorConn) readCertsCell() (
 		if _, err = io.ReadFull(payload, certCER); err != nil {
 			return
 		}
+
+		if !(certType == 1 || certType == 2 || certType == 3) {
+			continue
+		}
+
 		cert, err := x509.ParseCertificate(certCER)
 		if err != nil {
+			fmt.Printf("%x\n%x\n%s\n", c.payload, certCER, err)
 			return nil, nil, nil, err
 		}
 		switch certType {
